@@ -55,6 +55,23 @@ cryptonight(Buffer.from('This is a test'))
   .then(console.log) // <Buffer a0 84 f0 1d 14 37 ..>
 ```
 
+##### Fast hash (Keccak)
+
+Both hash and asyncHash can be used for calculating fast hash
+
+```js
+const cryptonight = require('node-cryptonight').asyncHash
+cryptonight(Buffer.from('This is a test'), true, hash => {
+  console.log(hash) // <Buffer 93 b9 0f ab 55 ad ..>
+})
+```
+
+```js
+const cryptonight = require('node-cryptonight').hash
+const hash = cryptonight(Buffer.from('This is a test'), true)
+console.log(hash) // <Buffer 93 b9 0f ab 55 ad ..>
+```
+
 ### See Also
 
 * [node-cryptonight-lite](https://github.com/ExcitableAardvark/node-cryptonight-lite)
