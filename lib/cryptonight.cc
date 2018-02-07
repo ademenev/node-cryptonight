@@ -37,9 +37,15 @@ using namespace node;
 using namespace v8;
 
 NAN_METHOD(Hash) {
-	if (info.Length() != 1)
-		return Nan::ThrowError("Argument must be a buffer");
-	
+	bool fast = false;
+	if (info.Length() < 1)
+		return Nan::ThrowError("At least one argument is required");
+	if (info.Length() > 1) {
+		if(!info[1]->IsBoolean())
+			return Nan::ThrowError("Argument 2 should be a boolean");
+		fast = info[1]->ToBoolean()->BooleanValue();
+	}
+
 	Local<Object> buf = info[0]->ToObject();
 
 	if (!Buffer::HasInstance(buf))
@@ -47,19 +53,27 @@ NAN_METHOD(Hash) {
 
 	hash x;
 
-	cn_slow_hash(Buffer::Data(buf), Buffer::Length(buf), x);
+	if (fast) {
+		cn_fast_hash(Buffer::Data(buf), Buffer::Length(buf), x);
+	} else {
+		cn_slow_hash(Buffer::Data(buf), Buffer::Length(buf), x);
+	}
 
 	info.GetReturnValue().Set(CopyBuffer(x.data, 32).ToLocalChecked());
 }
 
 class CnWorker : public AsyncWorker {
 public:
-	CnWorker(Callback *callback, char *data, int length)
-		 : AsyncWorker(callback), data(data), length(length) {}
+	CnWorker(Callback *callback, char *data, int length, bool fast)
+		 : AsyncWorker(callback), data(data), length(length), fast(fast) {}
 	~CnWorker() {}
 
 	void Execute() {
-		cn_slow_hash(data, length, hresult);
+		if (fast) {
+			cn_fast_hash(data, length, hresult);
+		} else {
+			cn_slow_hash(data, length, hresult);
+		}
 	}
 
 	void HandleOKCallback() {
@@ -74,23 +88,34 @@ private:
 	char *data;
 	int length;
 	hash hresult;
+	bool fast;
 };
 
 NAN_METHOD(AsyncHash) {
-	if (info.Length() != 2)
-		return Nan::ThrowError("Arguments must be a buffer and a callback");
-	
+	bool fast = false;
+	int callbackIndex = 1;
+	if (info.Length() < 2)
+		return Nan::ThrowError("At least two arguments are required");
+
 	Local<Object> buf = info[0]->ToObject();
 
 	if (!Buffer::HasInstance(buf))
-		return Nan::ThrowError("Arguments must be a buffer and a callback");
+		return Nan::ThrowError("First argument must be a buffer");
+
+	if (info.Length() > 2) {
+		if(!info[1]->IsBoolean())
+			return Nan::ThrowError("Argument 2 should be a boolean");
+		fast = info[1]->ToBoolean()->BooleanValue();
+		callbackIndex = 2;
+	}
+
 
 	char *data = Buffer::Data(buf);
 	int len = Buffer::Length(buf);
 
-	Callback *callback = new Callback(To<Function>(info[1]).ToLocalChecked());
+	Callback *callback = new Callback(To<Function>(info[callbackIndex]).ToLocalChecked());
 
-	AsyncQueueWorker(new CnWorker(callback, data, len));
+	AsyncQueueWorker(new CnWorker(callback, data, len, fast));
 }
 
 NAN_MODULE_INIT(CnInit) {
